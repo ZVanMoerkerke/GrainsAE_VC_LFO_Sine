@@ -1,6 +1,8 @@
 # GrainsAE_VC_LFO_Sine
 Low frequency sine wave oscillator with voltage control for Grains by Keurslager Kurt / Zeno Van Moerkerke (26/11/2021)
 
+Go to the .ino file to change the min & max frequency you want for your LFO. It is made easily adjustable.
+
 Quite straightforward script to run a sine wave LFO on AE Grains / Arduino Nano. Commentary is placed in the sketch for those interested in the inner workings of it. On more info on how to upload it to your Grains, please refer to the AE Modular Wiki page on the module.
 
 Controls are as follows:
