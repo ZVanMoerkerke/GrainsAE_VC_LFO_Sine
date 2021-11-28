@@ -1,7 +1,12 @@
 //VC LFO for AE Grains / Arduino Nano. By Zeno Van Moerkerke / Keurslager Kurt on 26/11/2021
 
+//The two parameters below can be easily set by the user and determine the min & max LFO frequency!
+//Set the min freq and max freq for the LFO here. Larger spread will of course lead to harder to fine-tune lfo's. But gives more dynamic fun ofc!
+//Make sure to write the value with a '.0' after it. Or some number of choice. But it does have to be written down with a number after the dot for Arduino to handle it right.
 
-//Problem: pot debouncing werkt nog niet
+float absoluteminfreq = 0.01; //Min frequency in Hz
+float absolutemaxfreq = 10.0; //Max frequency in Hz
+
 
 //lookup table with a 256 bit sinewave. There is programming room for a bigger sinewave, but this makes the max sinewave speed slower, as the arduino has to cycle through more values.
 #include "sinewavedata.h"
@@ -16,15 +21,13 @@ int Input3 = A0;
 int Input4 = A3;  
 
 
+//Calculate min and max frequency values in microseconds per bit.
+long absolutemin = 1000000.0/(absoluteminfreq*256.0);   //0.1Hz = +-38462micros
+long absolutemax = 1000000.0/(absolutemaxfreq*256.0); //40Hz = +- 98 micros
+long absolutemin2 = absolutemin/2;
+long absolutemin3 = absolutemin2/2;
+long absolutemin4 = absolutemin3/2;
 
-/* Old part of the code to calculate frequency numbers to microseconds needed for each sine step.
- *  
-long freq = 10;
-long freqms = 1000000/(freq*256);
-long minfreq = 1000000/26;   //0.1Hz = +-38462micros
-long maxfreq = 1000000/(40*256); //40Hz = +- 98 micros
-
-*/
 
 //initializing some variables that are used later on.
 
@@ -55,8 +58,8 @@ void setup()
   pinMode(Input3, INPUT);
   pinMode(Input4, INPUT);
 
-  TCCR2B = TCCR2B & B11111000 | B00000001; // for PWM frequency of 31372.55 Hz
-  TCCR1B = TCCR1B & B11111000 | B00000001; // set timer 1 divisor to 1 for PWM frequency of 31372.55 Hz  
+  TCCR2B = TCCR2B & B11111000 | B00000001; // 
+  TCCR1B = TCCR1B & B11111000 | B00000001; // set timer 1 divisor to 1 for max PWM frequency
 }
 
 //Let's loop. Max frequency is determined by max loop speed. Each loop, the microcontroller checks whether enough time has passed to go on to the next Sine step. 
@@ -77,18 +80,18 @@ void loop()
     //This loop contains some rescaling to make the LFO finer to adjust in the fast frequency range. This feels more natural to me.
     if(abs(inputRead1 - oldinputRead1) > 3){
       if( inputRead1 < 256){
-        freqms = map(inputRead1,0,255,38462,19182); //first quarter of the pot handles slowest half of oscillations
+        freqms = map(inputRead1,0,255,absolutemin,absolutemin2); //first quarter of the pot handles slowest half of oscillations
       }
       else{
         if(inputRead1 < 512){
-          freqms = map(inputRead1,256,511,19182,9591); //second quarter does half of the next half etc.
+          freqms = map(inputRead1,256,511,absolutemin2,absolutemin3); //second quarter does half of the next half etc.
         }
         else{
           if(inputRead1 < 900){
-            freqms = map(inputRead1,512,900,9591,200);
+            freqms = map(inputRead1,512,900,absolutemin3,absolutemin4);
           }
             else{
-              freqms = map(inputRead1,900,1023,200,50);
+              freqms = map(inputRead1,900,1023,absolutemin4,absolutemax);
             }         
         }
       }
@@ -116,7 +119,8 @@ void loop()
   long timer = micros();
 
 
-  //Hope to get the last input working as sync input.
+  //Input CV 3 is used for syncing the lfo. It restarts the LFO on change UP
+  
   if((inputRead4 - oldinputRead4 > 200 || inputRead4 - oldinputRead4 < 200) && (timer- inputReadTime > 10000)){
     if(inputRead4 >700 && toggle == 0){
       toggle = 1;
@@ -131,7 +135,8 @@ void loop()
     }
   }
 
-  //Finally determine the Sinewave value between 0-255.
+  //Finally determine the Sinewave value between 0-255. It checks whether sufficient microseconds have passed to update the sine value.
+  
   if(timer - timerold >= freqms){
     timerold = timer;
     if (sample1 >= sinewave_length) {  
@@ -139,18 +144,18 @@ void loop()
     }
     else {
       
-      var1 = pgm_read_byte(&sinewave_data[sample1]);
-      int minvalSin = constrain(minval+offset,0,255);
-      int maxvalSin = constrain(maxval+offset,0,255);      
-      var1 = map(var1, 0,255,minvalSin,maxvalSin);      
-      var1 = constrain(var1,0,255);
+      var1 = pgm_read_byte(&sinewave_data[sample1]); //reading sine value
+      int minvalSin = minval+offset; //adding & substracting offset to min and max sine value
+      int maxvalSin = maxval+offset;      
+      var1 = map(var1, 0,255,minvalSin,maxvalSin);      //mapping the sine value between the min & max value.
+      var1 = constrain(var1,0,255); //Making sure the value stays inside the 0-255 range needed for the PWM parameter. Anything under or above gets clipped to 0V or 5V.
       
     }
-    //Update sinewave step
-    ++sample1;
-
+    
     //Update output PWM pin.
     analogWrite(Output1, var1);
     
+    //Update sinewave step
+    ++sample1;
   }
 }
